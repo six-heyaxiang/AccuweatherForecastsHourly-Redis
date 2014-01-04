@@ -154,7 +154,7 @@ func startRequest(ch chan City) {
 		resp, err := client.Get("http://apidev.accuweather.com/forecasts/v1/hourly/24hour/" + city.AccuKey + ".json?apiKey=" + apikey + "&language=en&details=true")
 		if nil != err {
 			logger.Println("城市：" + city.Id + "请求失败：" + city.AccuKey + "已返回请求队列")
-			if city.Count <= 2 {
+			if city.Count <= 1 {
 				ch <- city
 				city.Count++
 			}
@@ -163,7 +163,7 @@ func startRequest(ch chan City) {
 		body, err := ioutil.ReadAll(resp.Body)
 		if nil != err || len(body) == 0 {
 			logger.Println("获取内容失败！")
-			if city.Count <= 2 {
+			if city.Count <= 1 {
 				ch <- city
 				city.Count++
 			}
@@ -201,7 +201,6 @@ func startRequest(ch chan City) {
 		}
 		l.Lock()
 		finishCount++
-		//fmt.Println(finishCount)
 		l.Unlock()
 	}
 }

@@ -67,11 +67,11 @@ type City struct {
 /************************/
 type Hour struct {
 	DateTime            string
-	WeatherIcon         int
+	WeatherIcon         float64
 	IconPhrase          string
 	Temperature         interface{}
 	RealFeelTemperature interface{}
-	RelativeHumidity    int
+	RelativeHumidity    float64
 	Unit                string
 }
 type Hourly struct {
@@ -187,7 +187,7 @@ func startRequest(ch chan City) {
 			data_Tmperature, _ := v.Temperature.(map[string]interface{})
 			data_RealFeelTemperature, _ := v.RealFeelTemperature.(map[string]interface{})
 			var temp string
-			temp = v.DateTime + "," + strconv.Itoa(v.WeatherIcon) + "," + v.IconPhrase + "," + strconv.Itoa(v.RelativeHumidity) + "," + strconv.FormatFloat(data_Tmperature["Value"].(float64), 'f', 1, 64) + "," + strconv.FormatFloat(data_RealFeelTemperature["Value"].(float64), 'f', 1, 64) + "," + data_Tmperature["Unit"].(string)
+			temp = v.DateTime + "," + strconv.FormatFloat(v.WeatherIcon, 'f', 1, 64) + "," + v.IconPhrase + "," + strconv.FormatFloat(v.RelativeHumidity, 'f', 1, 64) + "," + strconv.FormatFloat(data_Tmperature["Value"].(float64), 'f', 1, 64) + "," + strconv.FormatFloat(data_RealFeelTemperature["Value"].(float64), 'f', 1, 64) + "," + data_Tmperature["Unit"].(string)
 			hour := v.DateTime[11:13]
 			err := redisclient.Set("forecasts:hourly:"+city.Id+":"+hour, []byte(temp))
 			if err != nil {

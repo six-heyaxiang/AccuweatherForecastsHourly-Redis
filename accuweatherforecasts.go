@@ -5,12 +5,13 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/monnand/goredis"
+	//"github.com/monnand/goredis"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"redis"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -36,7 +37,7 @@ var logFileName string = ""
 
 //redis
 var host string = ""
-var port string = ""
+var port int = 6379
 var password string = ""
 
 //apikey
@@ -57,7 +58,8 @@ var l sync.Mutex
 
 //var connectTimeout time.Duration
 //var readWriteTimeout time.Duration
-var redisclient goredis.Client
+//var redisclient goredis.Client
+//var redisclient redis.Client
 
 //City类
 type City struct {
@@ -97,7 +99,7 @@ func main() {
 	cityInfo = settings["cityInfo"]
 	//redis配置
 	host = settings["host"]
-	port = settings["port"]
+	port, _ = strconv.Atoi(settings["port"])
 	password = settings["password"]
 
 	//配置日志保存文件
@@ -113,9 +115,14 @@ func main() {
 	end = make(chan int)
 	defer close(end)
 	go writeCitiesToChannel(city, cities)
-	
-	redisclient.Addr = host + ":" + port
-	//redisclient.Auth(password)
+
+	//goredis
+	//redisclient.Addr = host + ":" + port
+	//redisclient.Db = 13
+	//err := redisclient.Auth(password)
+	//if err != nil {
+	//	logger.Println("Redis 认证失败")
+	//}
 	for i := 0; i < complicate_count; i++ {
 		go startRequest(city)
 	}
@@ -160,6 +167,13 @@ func writeCitiesToChannel(city chan City, cities []City) {
 //发送http请求
 func startRequest(ch chan City) {
 	client := &http.Client{}
+	var redisclient redis.Client
+	var rediserr error
+	spec := redis.DefaultSpec().Db(0).Host(host).Port(port).Password(password)
+	redisclient, rediserr = redis.NewSynchClientWithSpec(spec)
+	if rediserr != nil {
+		fmt.Println(rediserr)
+	}
 	for {
 		city := <-ch
 		if len(city.Id) == 0 || len(city.AccuKey) == 0 {
@@ -167,7 +181,7 @@ func startRequest(ch chan City) {
 		}
 		resp, err := client.Get("http://apidev.accuweather.com/forecasts/v1/hourly/24hour/" + city.AccuKey + ".json?apiKey=" + apikey + "&language=en&details=true")
 		if nil != err {
-			logger.Println("城市：" + city.Id + "请求失败：" + city.AccuKey)
+			logger.Println("城市：" + city.Id + "请求失败：" + city.AccuKey + "已返回请求队列")
 			if city.Count <= 2 {
 				ch <- city
 				city.Count++
@@ -215,7 +229,7 @@ func startRequest(ch chan City) {
 		}
 		l.Lock()
 		finishCount++
-		fmt.Println(finishCount)
+		//fmt.Println(finishCount)
 		l.Unlock()
 	}
 }

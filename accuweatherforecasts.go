@@ -57,6 +57,7 @@ var l sync.Mutex
 
 //var connectTimeout time.Duration
 //var readWriteTimeout time.Duration
+var redisclient goredis.Client
 
 //City类
 type City struct {
@@ -102,7 +103,6 @@ func main() {
 	//配置日志保存文件
 	t := time.Now()
 	logger, _ = setLoggerSaveFile(savePath, savePath+logFileName+"."+strconv.Itoa(t.Year())+"-"+strconv.Itoa(int(t.Month()))+"-"+strconv.Itoa(t.Day()))
-	makeSaveDirs()
 	logger.Println("核心数：" + strconv.Itoa(runtime.NumCPU()) + "协程数：" + strconv.Itoa(complicate_count))
 	//设置核心数
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -113,6 +113,9 @@ func main() {
 	end = make(chan int)
 	defer close(end)
 	go writeCitiesToChannel(city, cities)
+	
+	redisclient.Addr = host + ":" + port
+	//redisclient.Auth(password)
 	for i := 0; i < complicate_count; i++ {
 		go startRequest(city)
 	}
@@ -128,29 +131,6 @@ func checkFinish() {
 			break
 		}
 		time.Sleep(time.Second * 10)
-	}
-}
-func makeSaveDirs() {
-	//创建24小时预报数据保存路径
-	for i := 0; i < 100; i++ {
-		err := os.MkdirAll(dataSavePath_24+strconv.Itoa(i), 0660)
-		if err != nil {
-			logger.Panicln("创建文件保存目录失败")
-		}
-	}
-	//创建历史1小时预报数据保存目录
-	for i := 0; i < 24; i++ {
-		if i < 10 {
-			err := os.MkdirAll(dataSavePath_1+"0"+strconv.Itoa(i), 0660)
-			if err != nil {
-				logger.Panicln("创建文件保存目录失败")
-			}
-		} else {
-			err := os.MkdirAll(dataSavePath_1+strconv.Itoa(i), 0660)
-			if err != nil {
-				logger.Panicln("创建文件保存目录失败")
-			}
-		}
 	}
 }
 func writeCitiesToChannel(city chan City, cities []City) {
@@ -180,9 +160,6 @@ func writeCitiesToChannel(city chan City, cities []City) {
 //发送http请求
 func startRequest(ch chan City) {
 	client := &http.Client{}
-	var redisclient goredis.Client
-	redisclient.Addr = host + ":" + port
-	redisclient.Auth(password)
 	for {
 		city := <-ch
 		if len(city.Id) == 0 || len(city.AccuKey) == 0 {
@@ -219,7 +196,7 @@ func startRequest(ch chan City) {
 			}
 			continue
 		}
-		//添加未来24小时预报数据
+		//保存数据
 		for _, v := range hourly.Hours {
 			data_Tmperature, _ := v.Temperature.(map[string]interface{})
 			data_RealFeelTemperature, _ := v.RealFeelTemperature.(map[string]interface{})

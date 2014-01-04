@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	//"github.com/monnand/goredis"
 	"io"
 	"io/ioutil"
 	"log"
@@ -31,10 +30,6 @@ var logger *log.Logger = nil
 var savePath string = ""
 var logFileName string = ""
 
-//抓取数据保存路径
-//var dataSavePath_24 string = ""
-//var dataSavePath_1 string = ""
-
 //redis
 var host string = ""
 var port int = 6379
@@ -48,18 +43,13 @@ var cityInfo string = ""
 
 //管道
 var end chan int
-var city chan City //主管道
+var city chan City //城市信息传送主管道
 //任务记数
 var taskCount int
 
 //任务完成数据
 var finishCount int = 0
 var l sync.Mutex
-
-//var connectTimeout time.Duration
-//var readWriteTimeout time.Duration
-//var redisclient goredis.Client
-//var redisclient redis.Client
 
 //City类
 type City struct {
@@ -115,18 +105,12 @@ func main() {
 	end = make(chan int)
 	defer close(end)
 	go writeCitiesToChannel(city, cities)
-
-	//goredis
-	//redisclient.Addr = host + ":" + port
-	//redisclient.Db = 13
-	//err := redisclient.Auth(password)
-	//if err != nil {
-	//	logger.Println("Redis 认证失败")
-	//}
+	//开启Go程
 	for i := 0; i < complicate_count; i++ {
 		go startRequest(city)
 	}
 	go checkFinish()
+
 	if <-end > 0 {
 		logger.Println("任务执行完成一次")
 	}
@@ -144,25 +128,13 @@ func writeCitiesToChannel(city chan City, cities []City) {
 	for i := 0; i < len(cities); i++ {
 		city <- cities[i]
 	}
-	logger.Println("城市信息写入channel完成,启动结束计时")
+	logger.Println("城市信息写入channel完成,启动结束计时...2分钟")
 	//启动任务结束计时
 	go func() {
 		time.Sleep(time.Second * 60 * 2)
 		end <- 1
 	}()
 }
-
-//设置链接超时和读取超时
-//func timeoutDialer(cTimeout time.Duration, rwTimeout time.Duration) func(net, addr string) (c net.Conn, err error) {
-//	return func(netw, addr string) (net.Conn, error) {
-//		conn, err := net.DialTimeout(netw, addr, cTimeout)
-//		if err != nil {
-//			return nil, err
-//		}
-//		conn.SetDeadline(time.Now().Add(rwTimeout))
-//		return conn, nil
-//	}
-//}
 
 //发送http请求
 func startRequest(ch chan City) {
@@ -172,7 +144,7 @@ func startRequest(ch chan City) {
 	spec := redis.DefaultSpec().Db(0).Host(host).Port(port).Password(password)
 	redisclient, rediserr = redis.NewSynchClientWithSpec(spec)
 	if rediserr != nil {
-		fmt.Println(rediserr)
+		logger.Println("Redis连接错误！")
 	}
 	for {
 		city := <-ch

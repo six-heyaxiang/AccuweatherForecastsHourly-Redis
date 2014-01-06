@@ -191,13 +191,15 @@ func startRequest(ch chan City) {
 			hour := v.DateTime[11:13]
 			err := redisclient.Set("forecasts:hourly:"+city.Id+":"+hour, []byte(temp))
 			if err != nil {
-				fmt.Println(err)
+				logger.Println(err)
 			}
 			data_24 += "#" + temp
 		}
-		err = redisclient.Set("forecasts:hourly:"+city.Id+":24", []byte(data_24[1:]))
-		if err != nil {
-			fmt.Println(err)
+		if len(data_24) > 0 {
+			err = redisclient.Set("forecasts:hourly:"+city.Id+":24", []byte(data_24[1:]))
+			if err != nil {
+				logger.Println(err)
+			}
 		}
 		l.Lock()
 		finishCount++

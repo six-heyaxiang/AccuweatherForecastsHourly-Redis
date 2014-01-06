@@ -176,7 +176,7 @@ func startRequest(ch chan City) {
 		err = json.Unmarshal(body, &hourly.Hours)
 		if err != nil {
 			logger.Println("城市：" + city.Id + "解析响应失败，已返回队列！")
-			if city.Count <= 2 {
+			if city.Count <= 1 {
 				city.Count++
 				ch <- city
 			}

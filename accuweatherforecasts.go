@@ -188,12 +188,27 @@ func startRequest(ch chan City) {
 			data_RealFeelTemperature, _ := v.RealFeelTemperature.(map[string]interface{})
 			var temp string
 			temp = v.DateTime + "," + strconv.FormatFloat(v.WeatherIcon, 'f', 1, 64) + "," + v.IconPhrase + "," + strconv.FormatFloat(v.RelativeHumidity, 'f', 1, 64) + "," + strconv.FormatFloat(data_Tmperature["Value"].(float64), 'f', 1, 64) + "," + strconv.FormatFloat(data_RealFeelTemperature["Value"].(float64), 'f', 1, 64) + "," + data_Tmperature["Unit"].(string)
-			hour := v.DateTime[11:13]
-			err := redisclient.Set("forecasts:hourly:"+city.Id+":"+hour, []byte(temp))
+
+			time, err := time.Parse("2006-01-02T15:04:00", v.DateTime[0:19])
 			if err != nil {
-				logger.Println(err)
+				logger.Println("时间转换错误")
+				continue
 			}
+			//保存数据
+			//err = redisclient.Set("forecasts:hourly:"+city.Id+":"+strconv.Itoa(time.Day())+":"+strconv.Itoa(time.Hour()), []byte(temp))
+			//if err != nil {
+			//logger.Println(err)
+			//}
+			//拼接24小时数据
 			data_24 += "#" + temp
+
+			//清除旧数据
+			//日期减两天
+			//time = time.Add(-1e9 * 60 * 60 * 24 * 2)
+			_, delErr := redisclient.Del("forecasts:hourly:" + city.Id + ":" + strconv.Itoa(time.Day()) + ":" + strconv.Itoa(time.Hour()))
+			if delErr != nil {
+				fmt.Println("城市:" + city.Id + "清除旧数据失败")
+			}
 		}
 		if len(data_24) > 0 {
 			err = redisclient.Set("forecasts:hourly:"+city.Id+":24", []byte(data_24[1:]))

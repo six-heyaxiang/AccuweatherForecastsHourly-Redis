@@ -107,7 +107,7 @@ func main() {
 	go writeCitiesToChannel(city, cities)
 	//开启Go程
 	for i := 0; i < complicate_count; i++ {
-		go startDel(city)
+		go startRequest(city)
 	}
 	go checkFinish()
 
@@ -135,39 +135,20 @@ func writeCitiesToChannel(city chan City, cities []City) {
 		end <- 1
 	}()
 }
-func startDel(ch chan City) {
-	var redisclient redis.Client
-	//var rediserr error
-	spec := redis.DefaultSpec().Db(0).Host(host).Port(port).Password(password)
-	redisclient, _ = redis.NewSynchClientWithSpec(spec)
-	for {
-		city := <-ch
-		for i := 0; i <= 24; i++ {
-			//if i < 10 {
-			//	for j := 1; j <= 31; j++ {
-			//		if j < 10 {
-			//			redisclient.Del("forecasts:hourly:" + city.Id + ":" + strconv.Itoa(j) + ":0" + strconv.Itoa(i))
-			//		} else {
-			//			redisclient.Del("forecasts:hourly:" + city.Id + ":" + strconv.Itoa(j) + ":0" + strconv.Itoa(i))
-			//		}
-			//	}
 
-			//} else {
-			for h := 1; h <= 31; h++ {
-				//if h < 10 {
-				//redisclient.Del("forecasts:hourly:" + city.Id + ":0" + strconv.Itoa(h) + ":" + strconv.Itoa(i))
-				//} else {
-				redisclient.Del("forecasts:hourly:" + city.Id + ":" + strconv.Itoa(h) + ":" + strconv.Itoa(i))
-				//}
-			}
-			//}
-		}
-		l.Lock()
-		finishCount++
-		fmt.Println(finishCount)
-		l.Unlock()
-	}
-}
+//func delRedis(ch chan City) {
+//	var redisclient redis.Client
+//	var rediserr error
+//	spec := redis.DefaultSpec().Db(0).Host(host).Port(port).Password(password)
+//	redisclient, rediserr = redis.NewSynchClientWithSpec(spec)
+//	if rediserr != nil {
+//		logger.Println("Redis连接错误！")
+//	}
+//	for {
+//		city := <-ch
+//		redisclient.Del("forecasts:hourly:" + city.Id)
+//	}
+//}
 
 //发送http请求
 func startRequest(ch chan City) {
@@ -216,26 +197,62 @@ func startRequest(ch chan City) {
 			continue
 		}
 		//保存数据
-		for _, v := range hourly.Hours {
+		b, _ := redisclient.Exists("forecasts:hourly:" + city.Id)
+		if b == false {
+			for i := 0; i < 100; i++ {
+				redisclient.Lpush("forecasts:hourly:"+city.Id, []byte(""))
+			}
+		}
+		var firstHour time.Time
+		for k, v := range hourly.Hours {
 			data_Tmperature, _ := v.Temperature.(map[string]interface{})
 			data_RealFeelTemperature, _ := v.RealFeelTemperature.(map[string]interface{})
 			var temp string
 			temp = v.DateTime + "," + strconv.FormatFloat(v.WeatherIcon, 'f', 1, 64) + "," + v.IconPhrase + "," + strconv.FormatFloat(v.RelativeHumidity, 'f', 1, 64) + "," + strconv.FormatFloat(data_Tmperature["Value"].(float64), 'f', 1, 64) + "," + strconv.FormatFloat(data_RealFeelTemperature["Value"].(float64), 'f', 1, 64) + "," + data_Tmperature["Unit"].(string)
-			hour := v.DateTime[11:13]
-			err := redisclient.Set("forecasts:hourly:"+city.Id+":"+hour, []byte(temp))
-			if err != nil {
-				logger.Println(err)
+			regex := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*`)
+			if regex.FindAllString(v.DateTime, -1) != nil {
+				if k == 0 {
+					firstHour, _ = time.Parse("2006-01-02T15:04:00", v.DateTime[0:19])
+				}
+				t, _ := time.Parse("2006-01-02T15:04:00", v.DateTime[0:19])
+				var position int64 = 0
+				if t.Day() == firstHour.Day() {
+					position = int64(t.Hour())
+				} else if t.Day() == firstHour.Day()+1 {
+					position = int64(t.Hour() + 24)
+				}
+				if k == 0 {
+					if t.Day() == firstHour.Day() {
+						if t.Hour() == 22 {
+							err := redisclient.Lset("forecasts:hourly:"+city.Id, 49, []byte(temp))
+							if err != nil {
+								logger.Println(err)
+							}
+						}
+						if t.Hour() == 23 {
+							err := redisclient.Lset("forecasts:hourly:"+city.Id, 50, []byte(temp))
+							if err != nil {
+								logger.Println(err)
+							}
+						}
+					}
+				}
+				err := redisclient.Lset("forecasts:hourly:"+city.Id, position, []byte(temp))
+				if err != nil {
+					logger.Println(err)
+				}
 			}
 			data_24 += "#" + temp
 		}
 		if len(data_24) > 0 {
-			err = redisclient.Set("forecasts:hourly:"+city.Id+":24", []byte(data_24[1:]))
+			err = redisclient.Lset("forecasts:hourly:"+city.Id, 48, []byte(data_24[1:]))
 			if err != nil {
 				logger.Println(err)
 			}
 		}
 		l.Lock()
 		finishCount++
+		fmt.Println(finishCount)
 		l.Unlock()
 	}
 }
